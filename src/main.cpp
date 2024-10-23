@@ -9,6 +9,7 @@
 #include <optional>
 
 
+
 const struct SizeConfig {
 	SizeConfig(int screenW, int screenH,size_t rows, size_t cols, float tileSize, float tilePadd, float boardPadd)
 		: screenWidth{ screenW }, screenHeight{ screenH }, rows{ rows }, cols{cols},
@@ -16,8 +17,8 @@ const struct SizeConfig {
 
 	int const screenWidth;
 	int const screenHeight;
-	size_t rows;
-	size_t cols;
+	size_t const rows;
+	size_t const cols;
 	float const tileSize;
 	float const tilePadding;
 	float const boardPadding;
@@ -34,124 +35,66 @@ namespace Minesweeper {
 	template<size_t rows, size_t cols>
 	class Solver;
 
-	template<size_t rows, size_t cols>
 	class InputHandler;
 
-    template<typename T, size_t rows, size_t columns>
-    class Matrix {
-    public:
-        using Row = std::array<T, columns>;
-        using Column = std::array<T, rows>;
-
-        explicit Matrix() : content{} { };
-
-        friend std::ostream& operator<<(std::ostream& os, Matrix const& m) {
-
-            for (auto& row : m.content) {
-                os << "[ ";
-                for (auto& element : row) {
-                    os << element << ",";
-                }
-                os << " ]\n";
-            }
-            os << std::endl;
-            return os;
-        }
-
-        Row& operator[](size_t row) {
-            return content[row];
-        }
-
-        const Row& operator[](size_t row) const {
-            return content[row];
-        }
-    protected:
-
-        std::array<std::array<T, columns>, rows> content;
-    };
-
-	template<size_t rows, size_t cols>
-	class Board {
+	template<typename T>
+	class Matrix {
 	public:
-		Board() : tiles{}, bombs{} {
-			placeBombs();
-			placeHints();
-		}
 
-		void placeBombs() {
+		using Row = T*;
+		using Column = T*;
+
+		Matrix(size_t rows, size_t cols) : rows{ rows }, cols{ cols } {
+			allocSpace();
+			int count = 1;
 			for (size_t i = 0; i < rows; i++)
 			{
 				for (size_t j = 0; j < cols; j++)
 				{
-					if (rand() % 4 == 0) {
-						
-						tiles[i][j] = Tile{ 0, true, TileState::Closed };
-						bombs++;
-					}
-					else {
-						tiles[i][j] = Tile{ };
-					}
+					p[i][j] = count++;
 				}
 			}
-		}
-		void placeHints() {
-			std::vector<std::pair<int, int>>
-				offsets{ {-1,-1},{-1, 0},{-1,1},
-						 { 0,-1}        ,{ 0,1},
-						 { 1,-1},{ 1, 0},{ 1,1} };
-			for (size_t i = 0; i < rows; i++)
-			{
-				for (size_t j = 0; j < cols; j++)
-				{
+		};
 
-					if (tiles[i][j].isBomb()) {
-						continue;
-					}
-					int bombCount = 0;
-					for (auto& [dx, dy] : offsets) {
-						size_t newRow = i + dx;
-						size_t newCol = j + dy;
-						if (newRow < rows && newCol < cols) {
-							if (tiles[newRow][newCol].isBomb()) {
-								bombCount++;
-							}
-						}
-						tiles[i][j] = Tile{ bombCount };
-					}
-				}
+		size_t size(int dim) {
+			if (dim == 0)
+				return rows;
+			if (dim == 1)
+				return cols;
+			std::cerr << "Error: wrong dimension supplied!" << std::endl;
+		}
+
+		std::pair<size_t, size_t> size() {
+			return { rows, cols };
+		}
+
+
+		~Matrix() {
+			for (size_t i = 0; i < rows; i++) {
+				delete[] p[i];
 			}
+			delete p;
+			std::cout << "\n Matrix destructor called!; \n";
 		}
 
-		size_t getBombs() const {
-			return bombs;
+		Row operator[](size_t index) {
+			return p[index];
+		}
+		Row operator[](size_t index) const {
+			return p[index];
 		}
 
-		typename Matrix<Tile, rows, cols>::Row& operator[](size_t row) {
-			return tiles[row];
-		}
+	private:
+		size_t rows, cols;
 
-		const typename Matrix<Tile, rows, cols>::Row& operator[](size_t row) const {
-			return tiles[row];
-		}
+		T** p;
 
-		Board& operator--() {
-			--bombs;
-			return *this;
-		}
-
-		Board& operator++() {
-			++bombs;
-			return *this;
-		}
-
-		friend std::ostream& operator<<(std::ostream& os, Board const& b) {
-			os << b.tiles;
-			return os;
-		}
-
-	protected:
-		Matrix<Tile, rows, cols> tiles;
-		size_t bombs;
+		void allocSpace() {
+			p = new T * [rows];
+			for (size_t i = 0; i < rows; i++) {
+				p[i] = new T[cols];
+			}
+		};
 
 	};
 
@@ -160,7 +103,7 @@ namespace Minesweeper {
 		Tile(int val = 0, bool isBomb = false, TileState state = TileState::Closed)
 			:value{ val }, bomb{ isBomb }, state{ state }, heldDown{ false } {};
 
-		TileState getState() const {return state;}
+		TileState getState() const { return state; }
 
 		bool isBomb() const { return bomb; }
 		void setState(TileState st) { state = st; }
@@ -180,10 +123,94 @@ namespace Minesweeper {
 		TileState state;
 	};
 
-	template<size_t rows, size_t cols>
+
+	class Board {
+	public:
+		Board(size_t rows, size_t cols) : tiles{rows, cols}, bombs{} {
+			placeBombs();
+			placeHints();
+		}
+
+		void placeBombs() {
+			for (size_t i = 0; i < tiles.size(0); i++)
+			{
+				for (size_t j = 0; j < tiles.size(1); j++)
+				{
+					if (rand() % 4 == 0) {
+						
+						tiles[i][j] = Tile{ 0, true, TileState::Closed };
+						bombs++;
+					}
+					else {
+						tiles[i][j] = Tile{ };
+					}
+				}
+			}
+		}
+		void placeHints() {
+			std::vector<std::pair<int, int>>
+				offsets{ {-1,-1},{-1, 0},{-1,1},
+						 { 0,-1}        ,{ 0,1},
+						 { 1,-1},{ 1, 0},{ 1,1} };
+			for (size_t i = 0; i < tiles.size(0); i++)
+			{
+				for (size_t j = 0; j < tiles.size(1); j++)
+				{
+
+					if (tiles[i][j].isBomb()) {
+						continue;
+					}
+					int bombCount = 0;
+					for (auto& [dx, dy] : offsets) {
+						size_t newRow = i + dx;
+						size_t newCol = j + dy;
+						if (newRow < tiles.size(0) && newCol < tiles.size(1)) {
+							if (tiles[newRow][newCol].isBomb()) {
+								bombCount++;
+							}
+						}
+						tiles[i][j] = Tile{ bombCount };
+					}
+				}
+			}
+		}
+
+		size_t getBombs() const {
+			return bombs;
+		}
+
+		typename Matrix<Tile>::Row operator[](size_t row) {
+			return tiles[row];
+		}
+
+		const typename Matrix<Tile>::Row operator[](size_t row) const {
+			return tiles[row];
+		}
+
+		Board& operator--() {
+			--bombs;
+			return *this;
+		}
+
+		Board& operator++() {
+			++bombs;
+			return *this;
+		}
+
+
+	protected:
+		Matrix<Tile> tiles;
+		size_t bombs;
+	};
+
 	class Game {
 	public:
-		Game(SizeConfig const& conf) : state{ GameState::Ongoing }, sizeConfig{ conf }, startTime{ GetTime() }, endTime{} { initTiles(); initCheatButton(); }
+		Game(SizeConfig const& conf) :
+			state{ GameState::Ongoing }, sizeConfig{ conf }, startTime{ GetTime() }, endTime{}, board{conf.rows, conf.cols} { initTiles(); initCheatButton(); }
+
+		~Game() {
+			delete[] tiles;
+		}
 
 		void toggleFlag(size_t row, size_t col) {
 			if (getTile(row, col).getState() == TileState::Flagged) {
@@ -202,16 +229,16 @@ namespace Minesweeper {
 		}
 
 		void initTiles() {	
-			float boardWidth = ((sizeConfig.tileSize + sizeConfig.tilePadding) * cols) - sizeConfig.tilePadding;
-			float boardHeight = ((sizeConfig.tileSize + sizeConfig.tilePadding) * rows) - sizeConfig.tilePadding;
+			float boardWidth = ((sizeConfig.tileSize + sizeConfig.tilePadding) * sizeConfig.cols) - sizeConfig.tilePadding;
+			float boardHeight = ((sizeConfig.tileSize + sizeConfig.tilePadding) * sizeConfig.rows) - sizeConfig.tilePadding;
 
 			float centerX = (sizeConfig.screenWidth - boardWidth) / 2;
 			float centerY = (sizeConfig.screenHeight - boardHeight) / 2;
-
-			for (int i = 0; i < rows * cols; i++)
+			tiles = new Rectangle[sizeConfig.rows* sizeConfig.cols];
+			for (int i = 0; i < sizeConfig.rows * sizeConfig.cols; i++)
 			{
-				int row = i / cols;
-				int col = i % cols;
+				int row = i / sizeConfig.cols;
+				int col = i % sizeConfig.cols;
 
 				tiles[i].x = centerX + col * (sizeConfig.tileSize + sizeConfig.tilePadding);
 				tiles[i].y = centerY + row * (sizeConfig.tileSize + sizeConfig.tilePadding);
@@ -224,9 +251,11 @@ namespace Minesweeper {
 		}
 
 		bool checkWin()  {
-			for (size_t i = 0; i < rows; i++){
-				for (Tile const& t : board[i]) {
-					if (t.getState() != TileState::Open && !t.isBomb())
+			for (size_t i = 0; i < sizeConfig.rows; i++){
+				for (size_t j = 0; j < sizeConfig.cols; j++)
+				{
+					Tile t = board[i][j];
+					if (t.getState() != TileState::Open && !t.isBomb()) 
 						return false;
 				}
 			}
@@ -312,7 +341,7 @@ namespace Minesweeper {
 			for (auto& [dx, dy] : offsets) {
 				size_t newRow = row + dx;
 				size_t newCol = col + dy;
-				if (newRow < rows && newCol < cols) {
+				if (newRow < sizeConfig.rows && newCol < sizeConfig.cols) {
 					callOnTiles(newRow, newCol);
 				}
 			}
@@ -328,32 +357,31 @@ namespace Minesweeper {
 	private:
 
 		double startTime, endTime;
-		Board<rows, cols> board;
+		Board board;
 		GameState state;
-		Rectangle tiles[rows * cols];
 		SizeConfig const& sizeConfig;
-		Rectangle cheatButton;
-	
+		Rectangle* tiles;
 
+		Rectangle cheatButton;
 	};
 
-	template<size_t rows, size_t cols>
+
 	class InputHandler {
 	public:
-		InputHandler() : mousePoint{} {};
+		InputHandler(SizeConfig const& conf) : mousePoint{}, sizeConfig{conf} {};
 		
-		void handleInput(Game<rows, cols>& game) {
+		void handleInput(Game& game) {
 			mousePoint = GetMousePosition();
-			if (CheckCollisionPointRec(mousePoint, game.getCheatButton())) {
+		/*	if (CheckCollisionPointRec(mousePoint, game.getCheatButton())) {
 				if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
 					Solver solver{ game };
 					solver.solve();
 				}
-			}
-			for (int i = 0; i < rows*cols; i++)
+			}*/
+			for (int i = 0; i < sizeConfig.rows * sizeConfig.cols; i++)
 			{
-				int row = i / cols;
-				int col = i % cols;
+				int row = i / sizeConfig.cols;
+				int col = i % sizeConfig.cols;
 				const Tile& currentTile = game.getTile(row, col);
 				if (CheckCollisionPointRec(mousePoint, game.getTileRect(i)))
 				{
@@ -396,13 +424,14 @@ namespace Minesweeper {
 		}
 	private:
 		Vector2 mousePoint;
+		SizeConfig const& sizeConfig;
 		
 	};
 
-	template<size_t rows, size_t cols>
+
 	class GameRenderer {
 	public:
-		GameRenderer(SizeConfig& s, Game<rows, cols> const& game) :
+		GameRenderer(SizeConfig const& s, Game const& game) :
 			sizeConfig{ s }, game{game} {
 			Image bombPath = LoadImage("resources/bomb_1_ps.png");
 			ImageFormat(&bombPath, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
@@ -439,9 +468,9 @@ namespace Minesweeper {
 								sizeConfig.boardWidth + sizeConfig.boardPadding, sizeConfig.boardHeight + sizeConfig.boardPadding };
 			DrawRectangleRec(gameBoard, GRAY);
 
-			for (int i = 0; i < cols * rows; ++i) {
-				int row = i / cols;
-				int col = i % cols;
+			for (int i = 0; i < sizeConfig.cols * sizeConfig.rows; ++i) {
+				int row = i / sizeConfig.cols;
+				int col = i % sizeConfig.cols;
 
 				TileState state = game.getTileRenderState(row, col);
 				Rectangle tileRect = game.getTileRect(i);
@@ -564,71 +593,71 @@ namespace Minesweeper {
 			}
 		}
 		
-		Game<rows, cols> const& game;
-		SizeConfig& sizeConfig;
+		Game const& game;
+		SizeConfig const& sizeConfig;
 		Texture2D bombTex;
 		Texture2D flagTex;
 
 	};
 
-	template<size_t rows, size_t cols>
-	class Solver {
-	public:
-		
-		Solver(Game<rows, cols>& gameState) : gameState{ gameState } {};
-
-		void solve() {
-			for (size_t row = 0; row < rows; ++row) {
-				for (size_t col = 0; col < cols; ++col) {
-					const auto& tile = gameState.getTile(row, col);
-
-					if (tile.getState() == TileState::Open && tile.getValue() != 0) {
-						size_t flaggedTiles = countTileFlagged(row, col);
-						size_t closedTiles = countTileClosed(row, col);
-					
-						if (closedTiles == tile.getValue()) {
-							gameState.loopAdjacentTiles(row, col, [&](size_t newRow, size_t newCol) {
-								if(gameState.getTile(newRow, newCol).getState() != TileState::Flagged)
-									gameState.toggleFlag(newRow, newCol);
-								});
-							
-						}
-						if (flaggedTiles == tile.getValue()) {
-							gameState.loopAdjacentTiles(row, col, [&](size_t newRow, size_t newCol) {
-								if(gameState.getTile(newRow, newCol).getState() == TileState::Closed)
-									gameState.openTile(newRow, newCol);
-								});
-						
-						}
-					}
-					
-				}
-			}
-		}
-
-		size_t countTileClosed(size_t row, size_t col) {
-			size_t count = 0;
-			gameState.loopAdjacentTiles(row, col, [&](size_t newRow, size_t newCol)
-				{
-					if (gameState.getTile(newRow, newCol).getState() == TileState::Closed || gameState.getTile(newRow, newCol).getState() == TileState::Flagged)
-						count++;
-				});
-			return count;
-		}
-
-		size_t countTileFlagged(size_t row, size_t col) {
-			size_t count = 0;
-			gameState.loopAdjacentTiles(row, col, [&](size_t newRow, size_t newCol)
-				{
-					if (gameState.getTile(newRow, newCol).getState() == TileState::Flagged)
-						count++;
-				});
-			return count;
-		}
-		
-	private:
-		Game<rows, cols>& gameState;  
-	};
+//	template<size_t rows, size_t cols>
+//	class Solver {
+//	public:
+//		
+//		Solver(Game<rows, cols>& gameState) : gameState{ gameState } {};
+//
+//		void solve() {
+//			for (size_t row = 0; row < rows; ++row) {
+//				for (size_t col = 0; col < cols; ++col) {
+//					const auto& tile = gameState.getTile(row, col);
+//
+//					if (tile.getState() == TileState::Open && tile.getValue() != 0) {
+//						size_t flaggedTiles = countTileFlagged(row, col);
+//						size_t closedTiles = countTileClosed(row, col);
+//					
+//						if (closedTiles == tile.getValue()) {
+//							gameState.loopAdjacentTiles(row, col, [&](size_t newRow, size_t newCol) {
+//								if(gameState.getTile(newRow, newCol).getState() != TileState::Flagged)
+//									gameState.toggleFlag(newRow, newCol);
+//								});
+//							
+//						}
+//						if (flaggedTiles == tile.getValue()) {
+//							gameState.loopAdjacentTiles(row, col, [&](size_t newRow, size_t newCol) {
+//								if(gameState.getTile(newRow, newCol).getState() == TileState::Closed)
+//									gameState.openTile(newRow, newCol);
+//								});
+//						
+//						}
+//					}
+//					
+//				}
+//			}
+//		}
+//
+//		size_t countTileClosed(size_t row, size_t col) {
+//			size_t count = 0;
+//			gameState.loopAdjacentTiles(row, col, [&](size_t newRow, size_t newCol)
+//				{
+//					if (gameState.getTile(newRow, newCol).getState() == TileState::Closed || gameState.getTile(newRow, newCol).getState() == TileState::Flagged)
+//						count++;
+//				});
+//			return count;
+//		}
+//
+//		size_t countTileFlagged(size_t row, size_t col) {
+//			size_t count = 0;
+//			gameState.loopAdjacentTiles(row, col, [&](size_t newRow, size_t newCol)
+//				{
+//					if (gameState.getTile(newRow, newCol).getState() == TileState::Flagged)
+//						count++;
+//				});
+//			return count;
+//		}
+//		
+//	private:
+//		Game<rows, cols>& gameState;  
+//	};
 }
 
 //------------------------------------------------------------------------------------
@@ -648,10 +677,10 @@ int main(void)
 	InitWindow(sizeConfig.screenWidth, sizeConfig.screenHeight, "Minesweeper");
 	SetTargetFPS(60);
 
-	Minesweeper::Game<rows, cols> gameState{ sizeConfig };
-	Minesweeper::GameRenderer<rows, cols> renderer{ sizeConfig, gameState };
-	Minesweeper::InputHandler<rows, cols> inputHandler{};
-	Minesweeper::Solver<rows, cols> solver{ gameState };
+	Minesweeper::Game gameState{ sizeConfig };
+	Minesweeper::GameRenderer renderer{ sizeConfig, gameState }; 
+	Minesweeper::InputHandler inputHandler{sizeConfig}; 
+	//Minesweeper::Solver<rows, cols> solver{ gameState };
 
 	// Main game loop
 	while (!WindowShouldClose())
